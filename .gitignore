@@ -154,3 +154,19 @@ megatron_output/
 
 # ast template
 ast_index_file.py
+subagent_research/
+
+# research scratch / generated artifacts (keep code + figures, drop data + outputs)
+research/eval/_selftest/
+research/eval/heldout_metrics/
+research/eval/indist_metrics/
+notebooks/audit_out/
+notebooks/logs/
+notebooks/visionr1_out/
+notebooks/sft_dataset_audit_out/
+*.executed.ipynb
+# data files never committed in research/notebooks
+research/**/*.parquet
+research/**/*.jsonl
+notebooks/**/*.parquet
+notebooks/**/*.jsonl
