@@ -510,6 +510,31 @@ class VllmEngine(InferEngine):
                 # Fallback for older vLLM versions
                 kwargs['guided_decoding'] = structured_outputs_param
 
+        # Ban the model's multimodal placeholder/pad tokens from being *generated*.
+        # The policy must never free-emit raw <|image_pad|>/<|video_pad|> (or the
+        # vision_start/end markers) in its text answer: each image/video pad token in
+        # input_ids is matched 1:1 against the vision-tower features, so a single stray
+        # pad token sampled at temperature>0 makes the counts disagree and the forward
+        # raises "Image features and image tokens do not match" — an intermittent crash
+        # that only surfaces after some RL exploration (e.g. SURDS GRPO step 395).
+        # Banning at generation keeps rollout token_ids/logprobs/masks consistent
+        # (stripping post-hoc would desync importance-sampling logprobs).
+        try:
+            cfg = getattr(self, 'config', None)
+            mm_bad_words = []
+            for _attr in ('image_token_id', 'video_token_id', 'vision_start_token_id', 'vision_end_token_id'):
+                _tid = getattr(cfg, _attr, None)
+                if _tid is None and hasattr(cfg, 'text_config'):
+                    _tid = getattr(cfg.text_config, _attr, None)
+                if isinstance(_tid, int) and _tid >= 0:
+                    _tok = self.tokenizer.convert_ids_to_tokens(_tid)
+                    if isinstance(_tok, str) and _tok and _tok not in mm_bad_words:
+                        mm_bad_words.append(_tok)
+            if mm_bad_words:
+                kwargs['bad_words'] = list(kwargs.get('bad_words') or []) + mm_bad_words
+        except Exception as e:
+            logger.warning(f'Failed to set multimodal placeholder bad_words: {e}')
+
         res = SamplingParams(**kwargs)
 
         if hasattr(res, 'output_kind') and res.n > 1:
