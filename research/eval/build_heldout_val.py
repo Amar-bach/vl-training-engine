@@ -218,7 +218,10 @@ def gold_vs_gold(df):
         img  = row["image_path"]
         image_wh = None  # skip per-image size for speed; norm-space for xy2d
 
-        result = score_one(gold, gold, t, image_wh=image_wh)
+        # heldout xy2d gold is normalised 0-1000 (see _normalize_xy2d_gold above), so
+        # declare gold_space='norm' — otherwise score_one's frame guard rejects a
+        # pixel-gold-without-image_wh compare. (For categorical templates this is ignored.)
+        result = score_one(gold, gold, t, image_wh=image_wh, gold_space="norm")
         per_template.setdefault(t, []).append(result["correct"])
 
     for t in TEMPLATES:

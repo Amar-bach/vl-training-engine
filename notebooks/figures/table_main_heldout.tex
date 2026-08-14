@@ -7,16 +7,18 @@
 \toprule
 Model & Greedy accuracy (\%) & Mean per-sample accuracy (\%) & pass@8 (\%) & Self-consistency maj@8 (\%) & $\Delta$ greedy (pts) & $\Delta$ maj@8 (pts) \\
 \midrule
-Qwen3-VL-8B-Instruct (zero-shot baseline) & 46.2 & 46.2 & 73.5 & 48.0 & +12.2 & +7.7 \\
-Qwen3-VL-8B-Thinking (zero-shot baseline) & 33.9 & 33.9 & 61.4 & 40.3 & -- & --  % reference arm \\
-SURDS-SFT (Instruct) & 63.7 & 63.7 & 80.9 & 65.5 & +29.8 & +25.1 \\
-SURDS-SFT (Thinking) & 63.6 & 63.6 & 82.7 & 64.7 & +29.7 & +24.4 \\
-+ Geometry/Math & 64.0 & 64.0 & 81.9 & 65.5 & +30.1 & +25.1 \\
-+ Chart/Plot & 64.6 & 64.6 & 82.4 & 67.2 & +30.6 & +26.8 \\
-+ Science Diagram & 64.1 & 64.1 & 83.9 & 64.5 & +30.1 & +24.1 \\
-+ Doc/Text & 64.4 & 64.4 & 83.4 & 66.2 & +30.5 & +25.8 \\
-+ General VQA & 64.9 & 64.9 & 83.8 & 67.0 & +30.9 & +26.7 \\
-+ Full Mulberry & 65.8 & 65.8 & 81.3 & 68.0 & +31.9 & +27.6 \\
+Qwen3-VL-8B-Instruct (zero-shot baseline) & 44.5 & 46.6 & 74.3 & 48.7 & +11.6 & +3.9 \\
+Qwen3-VL-8B-Thinking (zero-shot baseline) & 32.9 & 41.3 & 71.8 & 44.8 & -- & --  % reference arm \\
+Qwen3-VL-32B-Thinking (zero-shot teacher) & 42.0 & 42.8 & 69.6 & 46.6 & +9.1 & +1.8 \\
+Qwen3-VL-235B-A22B-Thinking (zero-shot teacher) & 62.2 & 64.0 & 82.9 & 65.4 & +29.3 & +20.5 \\
+SURDS-SFT (Instruct) & 63.9 & 63.7 & 80.9 & 65.5 & +31.0 & +20.6 \\
+SURDS-SFT (Thinking) & 64.0 & 63.6 & 82.7 & 64.7 & +31.0 & +19.9 \\
++ Geometry/Math & 64.4 & 64.0 & 81.9 & 65.5 & +31.5 & +20.6 \\
++ Chart/Plot & 64.9 & 64.6 & 82.4 & 67.2 & +32.0 & +22.3 \\
++ Science Diagram & 64.3 & 64.1 & 83.9 & 64.5 & +31.3 & +19.6 \\
++ Doc/Text & 63.5 & 64.4 & 83.4 & 66.2 & +30.5 & +21.3 \\
++ General VQA & 64.8 & 64.9 & 83.8 & 67.0 & +31.9 & +22.2 \\
++ Full Mulberry & 66.2 & 65.8 & 81.3 & 68.0 & +33.3 & +23.1 \\
 \bottomrule
 \end{tabular}
 \end{table}

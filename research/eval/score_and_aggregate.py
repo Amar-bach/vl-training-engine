@@ -191,16 +191,25 @@ def score_arm(df, meta):
         gold = r["gold_answer"]
         img_path = r["image_path_meta"] if "image_path_meta" in r and pd.notna(r["image_path_meta"]) else r.get("image_path")
         image_wh = None
-        if tt in ss.CONTINUOUS_TEMPLATES and tt == "xy2d" and img_path:
-            try:
-                image_wh = ss.get_image_wh(img_path)
-            except Exception:
-                image_wh = None
+        # val_meta xy2d gold is teacher-distilled 0-1000 NORMALISED (verified: no gold
+        # coord > 1000). Pred is also 0-1000. We still pass image_wh so score_one
+        # reconciles BOTH into the SURDS pixel frame (50 px tol); gold_space='norm'
+        # tells it to rescale the gold too. Passing image_wh WITHOUT gold_space='norm'
+        # was the bug that inflated gold ~1.7x and broke the xy2d ablation numbers.
+        # (See score_surds frame-trap note / repo CLAUDE.md "SURDS xy2d coordinate frames".)
+        gold_space = "pixels"
+        if tt in ss.CONTINUOUS_TEMPLATES and tt == "xy2d":
+            gold_space = "norm"
+            if img_path:
+                try:
+                    image_wh = ss.get_image_wh(img_path)
+                except Exception:
+                    image_wh = None
 
         # --- greedy ---
         greedy_text = r.get("greedy_text")
         g_ans = ss.parse_answer(greedy_text)
-        g_res = ss.score_one(g_ans, gold, tt, image_wh=image_wh)
+        g_res = ss.score_one(g_ans, gold, tt, image_wh=image_wh, gold_space=gold_space)
         greedy_correct = bool(g_res["correct"])
         answer_parse_ok = bool(g_res["parse_ok"])
 
@@ -210,14 +219,14 @@ def score_arm(df, meta):
             samples = []
         samples = list(samples)
         sample_answers = [ss.parse_answer(s) for s in samples]
-        sample_results = [ss.score_one(a, gold, tt, image_wh=image_wh) for a in sample_answers]
+        sample_results = [ss.score_one(a, gold, tt, image_wh=image_wh, gold_space=gold_space) for a in sample_answers]
         n_samples = len(sample_results)
         n_correct = sum(1 for res in sample_results if res["correct"])
         n_parse_fail = sum(1 for res in sample_results if not res["parse_ok"])
 
         # --- maj@8 ---
         maj_ans = majority_answer(sample_answers, tt)
-        maj_res = ss.score_one(maj_ans, gold, tt, image_wh=image_wh)
+        maj_res = ss.score_one(maj_ans, gold, tt, image_wh=image_wh, gold_space=gold_space)
         maj_correct = bool(maj_res["correct"])
 
         # --- reasoning features (greedy trace) ---
@@ -262,10 +271,15 @@ def aggregate_cell(g):
                                  np.nan)
     out["pass@1_sampled"] = float(np.nanmean(per_q_sampled)) if np.isfinite(np.nanmean(per_q_sampled)) else 0.0
 
-    # pass@k for k=1..8 (use the max available sample count, capped at 8)
+    # pass@k for k=1..8 (use the max available sample count, capped at 8).
+    # NOTE: k starts at 2. pass_at_k(n,c,1)==c/n is the SAMPLED pass@1, which is already
+    # captured in out['pass@1_sampled']; letting the loop write out['pass@1'] here would
+    # CLOBBER the greedy pass@1 set above (the headline accuracy the figures label
+    # "greedy"). That silent overwrite was a bug — the reported pass@1 was the 8-sample
+    # mean, not greedy. Keep k>=2 so 'pass@1' stays greedy and 'pass@2..8' are sampled.
     nmax = int(g["n_samples"].max()) if n else 0
     nmax = min(nmax, 8)
-    for k in range(1, 9):
+    for k in range(2, 9):
         if k > nmax or nmax == 0:
             out[f"pass@{k}"] = float("nan")
             continue

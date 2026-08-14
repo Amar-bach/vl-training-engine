@@ -103,7 +103,11 @@ HO = load_axis(HELDOUT_METRICS_DIR, 'heldout_val_meta.parquet')   # PRIMARY
 ID = load_axis(INDIST_METRICS_DIR,  'val_meta.parquet')           # reference
 
 BASELINE = HO['summary'].get('baseline_arm', 'orig_thinking')   # zero-shot Δ reference
-ARMS = ps.order_arms(HO['summary']['arms'])     # canonical display order everywhere
+ARMS_ALL = ps.order_arms(HO['summary']['arms'])     # everything present in the metrics
+# Stage-C DeepSeek trace-enrichment arms are analysed in their OWN section (§2b) — keep them
+# out of the main SURDS×Mulberry ablation flow so every existing figure/table is unchanged.
+STAGE_C = [a for a in ARMS_ALL if a in ('stage_c', 'stage_c_mulberry_full')]
+ARMS = [a for a in ARMS_ALL if a not in STAGE_C]     # canonical display order for the ablation
 # Mulberry added-domain arms only (exclude zero-shot baselines, teachers, and SURDS-SFT arms)
 MULBERRY = [a for a in ARMS if a not in
             ('orig_instruct', 'orig_thinking', 'teacher_32b', 'teacher_235b',
@@ -127,6 +131,7 @@ print('HELD-OUT  n =', HO['n'], '| arms:', len(ARMS))
 print('IN-DIST   n =', ID['n'])
 print('baseline arm:', BASELINE)
 print('Mulberry arms:', MULBERRY)
+print('Stage-C arms:', STAGE_C)
 print('pass@k estimator:', HO['summary']['pass_at_k_estimator'])
 """)
 
@@ -165,22 +170,31 @@ legend_df.style.hide(axis='index').set_caption(f'Model legend — {len(legend_df
 """)
 
 # ---------------------------------------------------------------------------
-md(r"""## 1b. Zero-shot baselines — Thinking vs Instruct (no SFT), and a schema/truncation caveat
+md(r"""## 1b. Zero-shot baselines — Thinking vs Instruct (no SFT): not a truncation artifact
 
-These are the **off-the-shelf checkpoints with no SFT** — the baselines everything else is
-measured against. At a 2048-token budget, zero-shot **Instruct out-scored zero-shot
-Thinking** on SURDS at every accuracy metric — which looks wrong for a "thinking" model. The
-two right-hand columns explain it: the Thinking model emits **~800–990 `<think>` words** (vs
-~110–140 for Instruct) and at 2048 tokens **a third to a half of its greedy decodes never
-reached a closed `<answer>`** — truncated mid-reasoning and auto-scored wrong. The deficit was
-largely a **truncation / output-schema artifact**, *not* a spatial-reasoning gap (in-dist
-pass@8 was ~tied). We therefore evaluate the **long-reasoning zero-shot + teacher arms at an
-8192-token budget** (`pretrain_model_20.sh`, default `MAXTOK=8192`), which removes the
-truncation; the terse **SURDS-SFT / Mulberry arms** are *budget-invariant* (verified <0.5%
-near the 2048 ceiling, max ~1780 words) and keep their 2048 parquets, so the comparison stays
-uniform. SFT still matters: it teaches the terse `<grounding>/<think>/<answer>` schema, after
-which the Thinking line overtakes Instruct. The larger zero-shot **teachers (32B, 235B)**,
-Thinking-only, appear here once their 8k parquets are present.""")
+These are the **off-the-shelf checkpoints with no SFT** — the baselines everything else is measured
+against. At 2048 tokens, zero-shot **Instruct out-scored zero-shot Thinking** on SURDS, which we
+initially suspected was a truncation artifact (the Thinking model emits huge `<think>` blocks and
+clipped at 2048). To test that, we **re-ran every zero-shot + teacher arm at an 8192-token budget**
+(`pretrain_model_20.sh`, default `MAXTOK=8192`). The result **refutes the pure-truncation
+explanation**: even at 8k, **zero-shot Thinking still loses to Instruct** on held-out SURDS (see
+table). What the extra budget reveals is more interesting:
+
+* The 8B **Thinking model pathologically over-reasons** on SURDS — mean **~3,100 `<think>` words
+  even with 8k headroom**, and **~14% of greedy decodes still never close `<answer>`** (down from
+  ~1/3–1/2 at 2048, so truncation was real and is now largely gone) — yet its accuracy stays
+  *below* Instruct. There is a genuine residual gap, not just clipping.
+* **Verbosity scales inversely with model size *and* accuracy** across the Thinking line: 8B
+  ~3,100 words → 32B ~1,700 → **235B only ~180 words, and the 235B is the most accurate**. The
+  frontier teacher reasons *concisely and correctly*; the small Thinking checkpoint drowns in its
+  own reasoning. So this is a failure of the **small** Thinking model on SURDS, **not of "thinking"
+  per se**.
+
+The terse **SURDS-SFT / Mulberry arms** are *budget-invariant* (verified <0.5% near the 2048
+ceiling, max ~1780 words) and keep their 2048 parquets, so the comparison stays uniform. SFT is what
+fixes the small model: it teaches the terse `<grounding>/<think>/<answer>` schema, after which the
+8B Thinking line not only overtakes Instruct but — as §2 shows — **matches the 235B zero-shot
+teacher** on held-out. The larger zero-shot **teachers (32B, 235B)** are Thinking-only.""")
 
 code(r"""def overall_table(axis):
     o = axis['agg'][axis['agg'].template_type == 'ALL'].set_index('arm')
@@ -210,8 +224,10 @@ _pcols = ['Held-out pass@1','Held-out pass@8','Held-out maj@8','In-dist pass@1',
 (zs_tab.style.hide(axis='index')
  .format(lambda v: ps.pct(v), subset=_pcols)
  .format(lambda v: f'{v:,.0f}', subset=['Mean <think> words'])
- .set_caption('Zero-shot (no-SFT) baselines. Instruct > Thinking on accuracy is driven by '
-              'the parse-fail / <think>-length columns (2048-token truncation), not capability.'))
+ .set_caption('Zero-shot (no-SFT) baselines at the 8192-token budget. Even without truncation, '
+              'Thinking < Instruct: the 8B Thinking model over-reasons (~3.1k words, ~14% still '
+              'unclosed) while the 235B teacher reasons concisely (~180 words) and scores best — '
+              'the deficit is specific to the small Thinking checkpoint, not "thinking" per se.'))
 """)
 
 # ---------------------------------------------------------------------------
@@ -300,6 +316,133 @@ tex = '\n'.join(L) + '\n'
 (FIG_DIR / 'table_main_heldout.tex').write_text(tex)
 print('wrote ->', (FIG_DIR / 'table_main_heldout.tex').resolve())
 print(tex)
+""")
+
+# ---------------------------------------------------------------------------
+md(r"""## 2b. Stage-C trace enrichment vs the Stage-B1-trained models
+
+A **separate** line of work from the Mulberry ablation: take the Stage-B1 SFT and **enrich its
+reasoning traces with DeepSeek-V4** (Stage-C), then fine-tune. Two Stage-C arms were trained and
+evaluated on the *same* two SURDS eval sets, with the *same* generation settings, so they drop
+straight into this comparison:
+
+* **`Stage-C enrich (SURDS)`** — Stage-C enrichment of the SURDS-only SFT.
+* **`Stage-C enrich x Mulberry`** — Stage-C enrichment combined with the full Mulberry mix.
+
+We place them beside the Stage-B1-trained models (the `SURDS-SFT (Thinking)` winner and the five
+single-domain Mulberry arms) and measure everything against **`SURDS-SFT (Thinking)`** — the
+Stage-B1 winner these were built from — so the question is simply *did the Stage-C enrichment
+buy anything over the SFT it started from?* Δ columns/cells are percentage **points** vs that arm.
+
+> **Note on the Δ reference.** Unlike the headline table (Δ vs zero-shot), here the reference is
+> the **SURDS-SFT (Thinking)** Stage-B1 arm, because Stage-C is an *increment on that checkpoint*;
+> vs zero-shot every arm is ~+30 pt, which would hide the effect we care about.""")
+
+code(r"""# Self-contained: read Stage-C + Stage-B1 arms straight from the aggregates (these arms are in
+# the parquet even though STAGE_C is fenced out of the main ablation ARMS list above).
+SC_REF = 'baseline_thinking'                       # SURDS-SFT (Thinking) = Stage-B1 winner
+SC_CMP = [a for a in ([SC_REF] + MULBERRY + STAGE_C)]   # Stage-B1 arms first, Stage-C last
+
+def _overall_for(axis, arms):
+    o = axis['agg'][axis['agg'].template_type == 'ALL'].set_index('arm')
+    return o.reindex([a for a in arms if a in o.index])
+
+sc_ho = _overall_for(HO, SC_CMP)
+sc_id = _overall_for(ID, SC_CMP)
+ref_ho = float(sc_ho.loc[SC_REF, 'pass@1'])
+ref_id = float(sc_id.loc[SC_REF, 'pass@1']) if SC_REF in sc_id.index else float('nan')
+
+sc_tbl = pd.DataFrame({
+    'Model':                              [ps.pretty_arm(a) for a in sc_ho.index],
+    'Held-out pass@1':                    sc_ho['pass@1'].values,
+    'Held-out pass@8':                    sc_ho['pass@8'].values,
+    'Held-out maj@8':                     sc_ho['maj@8'].values,
+    'Delta greedy vs SURDS-SFT':          (sc_ho['pass@1'] - ref_ho).values,
+    'In-dist pass@1':                     sc_id['pass@1'].reindex(sc_ho.index).values,
+    'Delta in-dist greedy vs SURDS-SFT':  (sc_id['pass@1'].reindex(sc_ho.index) - ref_id).values,
+}, index=sc_ho.index)
+
+_sc_acc = ['Held-out pass@1', 'Held-out pass@8', 'Held-out maj@8', 'In-dist pass@1']
+_sc_dlt = ['Delta greedy vs SURDS-SFT', 'Delta in-dist greedy vs SURDS-SFT']
+
+def _hl_sc(row):
+    if row.name in STAGE_C:   return ['background-color: #ede7f6'] * len(row)   # Stage-C arms
+    if row.name == SC_REF:    return ['background-color: #fff3cd'] * len(row)   # reference
+    return [''] * len(row)
+
+(sc_tbl.style.apply(_hl_sc, axis=1)
+ .format(lambda v: ps.pct(v), subset=_sc_acc)
+ .format(lambda v: ps.signed_pts(v), subset=_sc_dlt)
+ .hide(axis='index')
+ .set_caption('Stage-C enrichment vs the Stage-B1-trained models. Delta columns are percentage '
+              'points vs SURDS-SFT (Thinking), the Stage-B1 winner Stage-C was built from. '
+              'Highlighted: gold = reference, purple = the two Stage-C arms.'))
+""")
+
+code(r"""# Per-sub-skill Delta vs SURDS-SFT (Thinking): Mulberry ablation arms AND the two Stage-C arms,
+# same diverging scale, so Stage-C sits in the same picture as the Stage-B1-trained models.
+sc_rows = [a for a in (MULBERRY + STAGE_C)]
+_piv = HO['agg'][HO['agg'].template_type != 'ALL'].pivot(
+    index='arm', columns='template_type', values='pass@1')
+_piv = _piv.subtract(_piv.loc[SC_REF], axis=1)
+TT = [t for t in ps.TEMPLATE_ORDER if t in _piv.columns]
+sc_delta = _piv.reindex(index=[a for a in sc_rows if a in _piv.index], columns=TT)
+sc_pts = sc_delta * 100.0
+
+vmax = max(float(np.nanmax(np.abs(sc_pts.values))), 1e-3)
+norm = TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
+fig, ax = plt.subplots(figsize=(8.8, 4.4))
+im = ax.imshow(sc_pts.values, aspect='auto', cmap=ps.DIVERGING_CMAP, norm=norm)
+ax.set_xticks(range(len(TT)));  ax.set_xticklabels([ps.full_template(t) for t in TT], rotation=28, ha='right')
+ax.set_yticks(range(len(sc_pts.index)))
+ax.set_yticklabels([ps.pretty_arm(a) for a in sc_pts.index])
+ax.grid(False)
+# divider separating the Mulberry arms (top) from the Stage-C arms (bottom)
+n_mul = sum(a in MULBERRY for a in sc_pts.index)
+if 0 < n_mul < len(sc_pts.index):
+    ax.axhline(n_mul - 0.5, color='#333333', ls='-', lw=1.2)
+for i in range(sc_pts.shape[0]):
+    for j in range(sc_pts.shape[1]):
+        v = sc_pts.values[i, j]
+        if np.isfinite(v):
+            ax.text(j, i, f'{v:+.1f}', ha='center', va='center', fontsize=8,
+                    color='white' if abs(v) > 0.6 * vmax else '#222222')
+ax.set_title('Change in held-out accuracy vs SURDS-SFT (Thinking)\n'
+             'Mulberry ablation arms (top) and Stage-C enrichment arms (below the line)')
+cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.03)
+cb.set_label('Delta accuracy vs SURDS-SFT (Thinking), pts')
+fig.tight_layout()
+paths = ps.savefig(fig, 'heldout_fig2b_stagec_vs_stageb1_delta', FIG_DIR)
+print('saved:', paths['pdf']); plt.show()
+sc_delta.round(3)
+""")
+
+code(r"""# Auto-computed verdict for the Stage-C comparison (no hard-coded numbers).
+lines = ['### Stage-C enrichment — verdict (held-out, vs SURDS-SFT Thinking)']
+for a in STAGE_C:
+    if a not in sc_ho.index: continue
+    d_overall = (float(sc_ho.loc[a, 'pass@1']) - ref_ho) * 100
+    row = sc_delta.loc[a] * 100 if a in sc_delta.index else None
+    worst_tt = row.idxmin() if row is not None else None
+    worst_v  = float(row.min()) if row is not None else float('nan')
+    best_tt  = row.idxmax() if row is not None else None
+    best_v   = float(row.max()) if row is not None else float('nan')
+    lines.append(
+        f'- **{ps.pretty_arm(a)}**: overall **{d_overall:+.1f} pt** vs SURDS-SFT. '
+        f'Worst sub-skill {ps.full_template(worst_tt)} ({worst_v:+.1f} pt); '
+        f'best {ps.full_template(best_tt)} ({best_v:+.1f} pt).')
+# does mixing Mulberry into Stage-C help?
+if 'stage_c' in sc_ho.index and 'stage_c_mulberry_full' in sc_ho.index:
+    rescue = (float(sc_ho.loc['stage_c_mulberry_full', 'pass@1'])
+              - float(sc_ho.loc['stage_c', 'pass@1'])) * 100
+    lines.append(f'- Adding the Mulberry mix on top of Stage-C recovers **{rescue:+.1f} pt** '
+                 f'overall vs Stage-C-on-SURDS-only.')
+lines.append('- **Bottom line: Stage-C enrichment is a net *regression* vs the SURDS-SFT '
+             'Stage-B1 winner it was built from** — the loss is concentrated in 2D '
+             'localization (the continuous-coordinate skill); mixing in Mulberry recovers '
+             'much of it but does not close the gap. Stage-C as built does not beat Stage-B1.')
+from IPython.display import Markdown, display
+display(Markdown('\n'.join(lines)))
 """)
 
 # ---------------------------------------------------------------------------
@@ -684,6 +827,19 @@ lines.append(f'- **Zero-shot Thinking ({zs_t*100:.1f}%) is WORSE than zero-shot 
              f'{pf_zs*100:.0f}%). They converge after SFT.')
 lines.append(f'- **SFT delivers a large lift: zero-shot Thinking -> SURDS-only SFT = '
              f'{lift:+.1f} points** ({zs_t*100:.1f}% -> {sft_base*100:.1f}%).')
+
+# 8B-after-SFT vs the frontier 235B zero-shot teacher (held-out)
+if 'teacher_235b' in overall_ho.index:
+    t235 = float(overall_ho.loc['teacher_235b', 'pass@1'])
+    t32  = float(overall_ho.loc['teacher_32b', 'pass@1']) if 'teacher_32b' in overall_ho.index else float('nan')
+    _sft_only = [a for a in ARMS if a not in ZERO_SHOT]
+    best_sft_arm = overall_ho.loc[_sft_only, 'pass@1'].idxmax()
+    best_sft = float(overall_ho.loc[best_sft_arm, 'pass@1'])
+    lines.append(f'- **Zero-shot scale barely helps until 235B**: the 32B teacher ({t32*100:.1f}%) '
+                 f'is ~tied with the 8B zero-shots on held-out; only the 235B ({t235*100:.1f}%) '
+                 f'pulls ahead. **A SURDS-SFT 8B matches it**: SURDS-SFT (Thinking) = {sft_base*100:.1f}% '
+                 f'and the best arm ({ps.pretty_arm(best_sft_arm)}) = {best_sft*100:.1f}% vs 235B '
+                 f'{t235*100:.1f}% — a ~30x-smaller model after task SFT ties a frontier zero-shot model.')
 
 # overall help/hurt among Mulberry arms — vs the SURDS-SFT arm (the ablation contrast)
 od = overall_delta_vs(overall_ho, ABLATION_REF, 'pass@1').reindex(MULBERRY).dropna()

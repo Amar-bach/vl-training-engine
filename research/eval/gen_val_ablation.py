@@ -21,8 +21,10 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -63,6 +65,18 @@ def parse_args():
     p.add_argument("--quantization", default=None,
                    help="vLLM quantization arg (e.g. 'fp8'). Default None = auto-detect from the "
                         "model's config (FP8 checkpoints carry their own quant_config).")
+    p.add_argument("--primers", default=None,
+                   help="Comma-list of convention primers to inject, by template: "
+                        f"{sorted(PRIMERS)}. 'none' disables all. Default: "
+                        f"{','.join(DEFAULT_PRIMERS)} (yaw is PERMANENT — A/B-validated "
+                        "+4.6pp greedy). Pass --primers none to reproduce pre-2026-08 arms.")
+    p.add_argument("--coord-primer", action="store_true",
+                   help="DEPRECATED alias: force-include the yaw primer (now on by default).")
+    p.add_argument("--only-templates", default=None,
+                   help="Comma-list of templates to keep (e.g. 'yaw' or 'fb'), detected by "
+                        "prompt signature. Preserves original idx for the meta join.")
+    p.add_argument("--yaw-only", action="store_true",
+                   help="DEPRECATED alias for --only-templates yaw.")
     return p.parse_args()
 
 
@@ -104,11 +118,125 @@ def load_val(val_path: str):
 #     "<think>\n" continuation by default; for Instruct we omit it.
 # ---------------------------------------------------------------------------
 
-def build_prompts(records, processor, base: str):
+# ---------------------------------------------------------------------------
+# CONVENTION PRIMERS
+#
+# Two SURDS templates define a term in a way that contradicts everyday usage, and
+# every model we tested (our 8B student AND the 32B/235B teachers) silently applies
+# the everyday meaning instead. These primers state the task's own definition
+# explicitly. They fix a CONVENTION gap, not a perception gap.
+#
+#   yaw : camera-relative compass frame. Unstable image-axis->compass rule =>
+#         180deg toward/away flips (+ 90deg axis errors, which are perception and
+#         NOT fixed by the primer). A/B job 1067475 (2026-07-15, cp896, 333 ex):
+#         greedy .486->.532, sampled .459->.538, 180-flips 57->39 (-32%).
+#         => PERMANENT (default on) as of 2026-08.
+#
+#   fb  : "front/back" is defined by distance from camera — the object FARTHER
+#         from the camera is "more forward". So "A in front of B" = A farther,
+#         and "A behind B" = A CLOSER. Measured on heldout (rl_init_cp896):
+#         'in front of' phrasing acc .832 (perception is fine — cf. distance .811)
+#         but 'behind' phrasing acc .230 — FAR BELOW the .50 binary chance floor,
+#         i.e. a systematic inversion, not guessing. The 235B teacher shows the
+#         same split (.787 / .252). A/B job 1071082 (2026-08-12, cp896, 333 ex):
+#         greedy .544->.811, 'behind' .236->.732, 'in front of' .818->.881 (no
+#         trade-off), pass@16 .799->.979. fb now matches distance (.811), i.e. the
+#         convention was the entire gap. => PERMANENT (default on).
+#
+# Injected per-template by prompt signature; see --primers.
+# ---------------------------------------------------------------------------
+COORD_PRIMER = """Coordinate reference (use this to convert the object's visible orientation into a compass direction):
+
+The camera's facing direction (stated above) fixes how image directions map to the compass. Find the row matching the camera's facing direction:
+
+  Camera faces NORTH -> far/top = North, near/bottom (toward camera) = South, image-right = East,  image-left = West
+  Camera faces SOUTH -> far/top = South, near/bottom (toward camera) = North, image-right = West,  image-left = East
+  Camera faces EAST  -> far/top = East,  near/bottom (toward camera) = West,  image-right = South, image-left = North
+  Camera faces WEST  -> far/top = West,  near/bottom (toward camera) = East,  image-right = North, image-left = South
+
+An object's facing direction is the compass direction its FRONT points. Find where the front points in the image, then read the compass value from the row above:
+  - You see the object's REAR (taillights, back)         -> front points away into the scene -> use far/top.
+  - You see the object's FRONT (grille, headlights, face) -> front points toward the camera    -> use near/bottom.
+  - You see the object's RIGHT side                       -> front points toward image-right   -> use image-right.
+  - You see the object's LEFT side                        -> front points toward image-left    -> use image-left.
+  - For a 3/4 view, combine the two nearest directions (e.g. front + right side is between near/bottom and image-right).
+
+Critical: "facing toward the camera" is the OPPOSITE of the camera's own facing direction; "facing away from the camera" is the SAME as the camera's facing direction. Do not swap these."""
+
+FB_PRIMER = """Front/back convention for this task (it is defined by DISTANCE FROM THE CAMERA, and is the OPPOSITE of everyday usage — read carefully):
+
+  "A is IN FRONT OF B"  means A is FARTHER from the camera than B.
+  "A is BEHIND B"       means A is CLOSER to the camera than B.
+
+In everyday speech "behind" suggests farther away. That is NOT the meaning here. Here the object farther from the camera is the one that is more forward.
+
+Procedure:
+  1. First decide purely which object is CLOSER to the camera and which is FARTHER (use occlusion, apparent size, and ground contact — lower in the image is usually closer).
+  2. Then answer using the definitions above:
+       - Asked "Is A in front of B?"  -> answer Yes if A is FARTHER from the camera than B, otherwise No.
+       - Asked "Is A behind B?"       -> answer Yes if A is CLOSER to the camera than B, otherwise No.
+  3. If the two are at nearly the same distance, choose the "almost the same" option.
+
+Do not skip step 2: decide the distance order first, then apply the definition literally, even when it feels backwards."""
+
+
+_YAW_SIG = re.compile(r"camera\b.{0,40}?\bis facing\b", re.I)
+# fb prompts uniquely say "front-back position(ing)"; distance asks "closer to the
+# camera" and never uses that phrase.
+_FB_SIG = re.compile(r"front-back position", re.I)
+
+
+def is_yaw_prompt(user_text: str) -> bool:
+    """Yaw prompts uniquely state the camera heading ('The camera in the image
+    is facing North'); no other SURDS template mentions it."""
+    return bool(user_text) and bool(_YAW_SIG.search(user_text))
+
+
+def is_fb_prompt(user_text: str) -> bool:
+    """fb prompts uniquely describe 'relative front-back positioning'."""
+    return bool(user_text) and bool(_FB_SIG.search(user_text))
+
+
+# template -> (detector, primer text)
+PRIMERS = {
+    "yaw": (is_yaw_prompt, COORD_PRIMER),
+    "fb": (is_fb_prompt, FB_PRIMER),
+}
+# Default-ON primers. Both are PERMANENT — each A/B-validated as strictly positive
+# on the heldout set with its own controlled job (see the per-template notes above).
+DEFAULT_PRIMERS = ("yaw", "fb")
+
+
+def parse_primers(spec: str):
+    """'yaw,fb' -> ('yaw','fb'); 'none'/'' -> (). Unknown names are an error."""
+    if spec is None:
+        return tuple(DEFAULT_PRIMERS)
+    spec = spec.strip().lower()
+    if spec in ("none", "off", ""):
+        return ()
+    out = tuple(s.strip() for s in spec.split(",") if s.strip())
+    bad = [s for s in out if s not in PRIMERS]
+    if bad:
+        sys.exit(f"ERROR: unknown --primers value(s): {bad}; known: {sorted(PRIMERS)}")
+    return out
+
+
+def matching_template(user_text: str):
+    """Return the template name whose detector matches, else None."""
+    for name, (det, _) in PRIMERS.items():
+        if det(user_text):
+            return name
+    return None
+
+
+def build_prompts(records, processor, base: str, primers=DEFAULT_PRIMERS):
     """
     Returns list of (prompt_str, pil_image) tuples.
+    primers: iterable of template names whose convention primer is appended.
     """
+    primers = tuple(primers or ())
     prompts = []
+    n_primed = Counter()
     for rec in tqdm(records, desc="Building prompts", file=sys.stderr):
         messages = [m for m in rec["messages"] if m["role"] != "assistant"]
         image_path = rec["images"][0]
@@ -122,6 +250,14 @@ def build_prompts(records, processor, base: str):
                 sys_msg = m["content"]
             elif m["role"] == "user":
                 user_text = m["content"]
+
+        # Append the convention primer for whichever template this prompt is.
+        # Placed AFTER the task/question text so the rule is the freshest context
+        # right before <think> (validated placement in the yaw A/B).
+        _tpl = matching_template(user_text) if primers else None
+        if _tpl in primers:
+            user_text = user_text.rstrip() + "\n\n" + PRIMERS[_tpl][1]
+            n_primed[_tpl] += 1
 
         # Build content list for user: strip the plain "<image>" tag from text
         # and pass the image as a separate content part.
@@ -144,6 +280,8 @@ def build_prompts(records, processor, base: str):
         )
 
         prompts.append((prompt_str, img))
+    print(f"[gen_val_ablation] primers={list(primers) or 'none'} injected={dict(n_primed)}",
+          flush=True)
     return prompts
 
 
@@ -209,6 +347,26 @@ def main():
     records = load_val(val_path)
     print(f"[gen_val_ablation] Loaded {len(records)} val examples.", flush=True)
 
+    # Tag every record with its ORIGINAL position so a filtered run still writes
+    # meta-aligned idx (scoring joins gen.idx -> heldout_val_meta.idx by position).
+    for _i, _rec in enumerate(records):
+        _rec["_orig_idx"] = _i
+
+    def _user_text(r):
+        for m in r["messages"]:
+            if m["role"] == "user":
+                return m["content"]
+        return ""
+
+    keep = args.only_templates
+    if args.yaw_only and not keep:
+        keep = "yaw"          # deprecated alias
+    if keep:
+        want = parse_primers(keep)   # same name validation as --primers
+        records = [r for r in records if matching_template(_user_text(r)) in want]
+        print(f"[gen_val_ablation] --only-templates {list(want)}: kept {len(records)} records.",
+              flush=True)
+
     # ------------------------------------------------------------------
     # 2. Load processor (tokenizer only, no model weights) for chat template
     # ------------------------------------------------------------------
@@ -220,7 +378,10 @@ def main():
     # 3. Build prompts
     # ------------------------------------------------------------------
     print("[gen_val_ablation] Building prompts...", flush=True)
-    prompts = build_prompts(records, processor, args.base)
+    _primers = parse_primers(args.primers)
+    if args.coord_primer and "yaw" not in _primers:   # deprecated alias
+        _primers = _primers + ("yaw",)
+    prompts = build_prompts(records, processor, args.base, primers=_primers)
 
     # ------------------------------------------------------------------
     # 4. Token counts (text portion only — cheap proxy)
@@ -296,7 +457,7 @@ def main():
         zip(records, greedy_texts, sample_texts, prompt_token_counts)
     ):
         rows.append({
-            "idx": idx,
+            "idx": rec.get("_orig_idx", idx),
             "arm": args.arm,
             "image_path": rec["images"][0],
             "prompt_tokens": n_tok,
@@ -333,6 +494,10 @@ def main():
         "tp": args.tp,
         "vllm_version": vllm.__version__,
         "wall_time_sec": round(wall_time, 1),
+        # Which convention primers were in the prompt. Recorded because it changes
+        # what the arm MEANS — arms generated before 2026-08 have primers=[].
+        "primers": list(_primers),
+        "only_templates": keep,
     }
     sidecar_path = str(out_path).replace(".parquet", "_meta.json")
     with open(sidecar_path, "w") as f:

@@ -1,0 +1,421 @@
+{
+ "meta": {
+  "run": "A_grpo_v3 L2-direct (job 1064116)",
+  "source": "/mnt/data4/shasta/amar.amarjyoti/research_data/rl_runs/bakeoff/A_grpo_v3/L2_direct/v1-20260617-011220/completions.jsonl",
+  "order": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "compass": [
+   "north",
+   "northeast",
+   "east",
+   "southeast",
+   "south",
+   "southwest",
+   "west",
+   "northwest"
+  ],
+  "rel_labels": [
+   "+0\u00b0 same as camera (faces away/into scene)",
+   "+45\u00b0",
+   "+90\u00b0 (camera-right)",
+   "+135\u00b0",
+   "+180\u00b0 toward camera (faces viewer)",
+   "+225\u00b0",
+   "+270\u00b0 (camera-left)",
+   "+315\u00b0"
+  ],
+  "n_prompt_groups": 407,
+  "n_rollout_samples": 8784,
+  "camera_facing_distribution": {
+   "north": 197,
+   "south": 210
+  }
+ },
+ "world_confusion": [
+  [
+   1052,
+   0,
+   282,
+   0,
+   453,
+   0,
+   165,
+   0
+  ],
+  [
+   0,
+   107,
+   0,
+   911,
+   0,
+   271,
+   1,
+   71
+  ],
+  [
+   46,
+   0,
+   106,
+   0,
+   48,
+   0,
+   200,
+   0
+  ],
+  [
+   1,
+   69,
+   0,
+   270,
+   0,
+   349,
+   0,
+   170
+  ],
+  [
+   204,
+   0,
+   248,
+   0,
+   1020,
+   0,
+   367,
+   0
+  ],
+  [
+   0,
+   85,
+   0,
+   260,
+   0,
+   336,
+   0,
+   157
+  ],
+  [
+   23,
+   0,
+   100,
+   0,
+   48,
+   0,
+   101,
+   0
+  ],
+  [
+   0,
+   84,
+   0,
+   421,
+   0,
+   563,
+   1,
+   130
+  ]
+ ],
+ "world_unparsed_per_gold": [
+  0,
+  31,
+  0,
+  5,
+  1,
+  10,
+  0,
+  17
+ ],
+ "per_class_acc": [
+  {
+   "cls": "N",
+   "correct": 1052,
+   "total": 1952,
+   "acc": 53.9
+  },
+  {
+   "cls": "NE",
+   "correct": 107,
+   "total": 1392,
+   "acc": 7.7
+  },
+  {
+   "cls": "E",
+   "correct": 106,
+   "total": 400,
+   "acc": 26.5
+  },
+  {
+   "cls": "SE",
+   "correct": 270,
+   "total": 864,
+   "acc": 31.2
+  },
+  {
+   "cls": "S",
+   "correct": 1020,
+   "total": 1840,
+   "acc": 55.4
+  },
+  {
+   "cls": "SW",
+   "correct": 336,
+   "total": 848,
+   "acc": 39.6
+  },
+  {
+   "cls": "W",
+   "correct": 101,
+   "total": 272,
+   "acc": 37.1
+  },
+  {
+   "cls": "NW",
+   "correct": 130,
+   "total": 1216,
+   "acc": 10.7
+  }
+ ],
+ "rel_pred_hist": [
+  1423,
+  828,
+  370,
+  764,
+  1472,
+  1036,
+  1201,
+  1626
+ ],
+ "rel_gold_hist": [
+  1424,
+  890,
+  384,
+  1358,
+  2367,
+  1309,
+  288,
+  700
+ ],
+ "examples": [
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT/nuscenes_09842_CAM_FRONT.webp",
+   "camera": "south",
+   "object": "blue car",
+   "gold": "North",
+   "rollouts": [
+    {
+     "pred": "North",
+     "correct": true,
+     "think": "The camera is facing South. The blue car is positioned on the road ahead of the camera, moving towards the camera's position. Since the camera is facing South and the car is coming towards the camera, the car must be facing North. This is because if the camera is looking South, anything coming directly towards it would be traveling from the South direction towards the North, meaning the front of the car is pointing North."
+    },
+    {
+     "pred": "East",
+     "correct": false,
+     "think": "The camera is facing South. The blue car is positioned on the road ahead of the camera, moving towards the camera's left side. Since the camera is facing South, its left side corresponds to East. Therefore, the blue car is facing East. Let's verify: if the car were facing South, it would be coming toward the camera directly; if West, it would be moving away to the right; if North, it would be coming from the opposite direction. The car's orientation aligns with East."
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT/nuscenes_22284_CAM_FRONT.webp",
+   "camera": "south",
+   "object": "orange rigid bus",
+   "gold": "North",
+   "rollouts": [
+    {
+     "pred": "South",
+     "correct": false,
+     "think": "The camera is facing South. In the distance, there is an orange rigid bus. Since the camera faces South and the bus is positioned ahead on the road (which continues in the same direction the camera is facing), the bus is also facing South. If the bus were facing any other direction (East, West, North), it would either be turning or positioned abnormally for a bus on a straight road. The road markings and the bus\u2019s alignment with the road confirm it is facing the same direction as the camera.\n\nCheck: The word \u201cHUMP\u201d and the arrow on the road are aligned with the camera\u2019s forward direction (Sout \u2026"
+    },
+    {
+     "pred": "South",
+     "correct": false,
+     "think": "The camera is facing South. In the image, the orange rigid bus is visible in the background, positioned behind the black car. Since the camera is facing South and the bus is in front of the camera (from the viewer's perspective), the bus must be facing the same direction as the camera. Therefore, the bus is facing South.\n\nError check: The bus is located ahead on the road, and the road appears to be straight. There are no indications of the bus being on a curve or turning, so it is reasonable to conclude it is facing South."
+    },
+    {
+     "pred": "North",
+     "correct": true,
+     "think": "The camera is facing South. In the distance, there is an orange rigid bus. Since the camera faces South and the bus is positioned such that it is behind the black car which is on the road ahead, the bus must be facing the opposite direction of the camera. If the camera faces South, the bus, being on the other side of the black car and aligned with the road, would face North. This is because the road appears to be a two-way street with the black car moving away from the camera (toward the bus), implying the bus is facing the same direction as the camera's opposite (North)."
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_BACK_LEFT/nuscenes_22785_CAM_BACK_LEFT.webp",
+   "camera": "south",
+   "object": "red motorcycle",
+   "gold": "Northeast",
+   "rollouts": [
+    {
+     "pred": "Northeast",
+     "correct": true,
+     "think": "The camera is facing South. In the image, the red motorcycle is on the left side, positioned on the road. Since the camera faces South, the top of the image is South, the bottom is North, the left is East, and the right is West. The motorcycle is angled such that it is facing towards the left side of the image (East) and slightly towards the bottom (North). Therefore, the direction is Northeast. Let me verify: if the camera faces South, then the direction the motorcycle is facing (towards the upper-left of the image) would be Northeast. Yes, that is correct."
+    },
+    {
+     "pred": "Southwest",
+     "correct": false,
+     "think": "The camera is facing South. In the image, the red motorcycle is on the left side, positioned on the road. Since the camera faces South, the top of the image is South, the bottom is North, the left is East, and the right is West. The motorcycle appears to be oriented towards the right side of the image (West) and slightly forward (South). However, since the camera is facing South, the motorcycle's front is pointing towards the West. But wait, let's check again: if the camera faces South, then the direction the motorcycle is facing needs to be relative to the camera's South. The motorcycle is on \u2026"
+    },
+    {
+     "pred": "Southwest",
+     "correct": false,
+     "think": "The camera is facing South, so the scene\u2019s forward direction (toward the bottom of the image) is South. North is opposite, South is forward, East is to the right, and West is to the left.\n\nThe red motorcycle is on the left side of the image, near the sidewalk. It is positioned horizontally and appears to be facing toward the right side of the image. Since the camera faces South, the right side of the image corresponds to West. However, the motorcycle is angled slightly forward (toward the camera\u2019s right and slightly forward direction).\n\nTo determine the cardinal direction: \n- If the motorcycle \u2026"
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT/nuscenes_21287_CAM_FRONT.webp",
+   "camera": "south",
+   "object": "white car",
+   "gold": "South",
+   "rollouts": [
+    {
+     "pred": "South",
+     "correct": true,
+     "think": "The camera is facing South. The white car is on the right side of the road, and its rear is visible, meaning it is facing away from the camera. If the camera is facing South, then the direction away from the camera is South. Therefore, the white car is facing South."
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT_LEFT/nuscenes_20127_CAM_FRONT_LEFT.webp",
+   "camera": "south",
+   "object": "black car",
+   "gold": "Southeast",
+   "rollouts": [
+    {
+     "pred": "Northeast",
+     "correct": false,
+     "think": "The camera is facing South, so the scene\u2019s forward direction (toward the horizon) is South. The black car is on the left side of the image, parked near the curb. Its rear is visible, meaning its front is pointing away from the camera. Since the camera faces South, \u201caway from the camera\u201d corresponds to North. However, the car is angled slightly to the right (toward the center of the image), which would place its front direction between North and East. Among the options, Northeast is the closest match to this orientation. \n\nCheck: If the car were facing directly North, it would be perpendicular  \u2026"
+    },
+    {
+     "pred": "Northeast",
+     "correct": false,
+     "think": "The camera is facing South, so the scene\u2019s forward direction (toward the horizon) is South. The black car is on the left side of the image, parked near the curb. Its rear is visible, meaning its front is pointing away from the camera. Since the camera faces South, \u201caway from the camera\u201d corresponds to North. However, the car is angled slightly to the right (toward the center of the image), which would place its front direction between North and East. Among the options, Northeast is the closest match to this orientation. \n\nError check: If the car were facing directly North, it would be perpendi \u2026"
+    },
+    {
+     "pred": "Southwest",
+     "correct": false,
+     "think": "The camera is facing South, so the direction the car is facing can be determined by its orientation relative to the camera's perspective.\n\n1. The black car is on the left side of the image, positioned on the road or parking area. Its rear is visible, meaning the front of the car is pointing away from the camera.\n2. Since the camera is facing South, \"away from the camera\" would be South. However, the car is angled slightly to the right (toward the right side of the image), which would place it in a direction between South and West.\n3. Looking at the options: Southwest is between South and West, \u2026"
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT/nuscenes_04808_CAM_FRONT.webp",
+   "camera": "north",
+   "object": "white car",
+   "gold": "South",
+   "rollouts": [
+    {
+     "pred": "North",
+     "correct": false,
+     "think": "The camera is facing North, so the direction the white car is facing depends on its orientation relative to the camera's view.\n\n1. The white car is positioned on the road ahead of the bus, in the same lane or adjacent lane. \n2. The car's front is visible, indicating it is moving or oriented towards the camera's direction. \n3. Since the camera is facing North, if the car is facing the camera, it is facing South. If it is moving away, it is facing North. \n4. Observing the car's position: it is in front of the bus, and the bus is on the right side of the road. The car appears to be moving towards \u2026"
+    },
+    {
+     "pred": "North",
+     "correct": false,
+     "think": "The camera is facing North, so the direction the white car is facing depends on its orientation relative to the camera's view.\n\n1. The white car is positioned on the road ahead of the bus, in the same lane or adjacent lane. \n2. The car's front is visible, indicating it is moving forward along the road. \n3. Since the camera is facing North, and the car is moving forward (away from the camera), the car must be facing North.\n\nError check: If the car were facing South, it would be moving towards the camera. If it were facing East or West, it would be perpendicular to the camera's North-facing dire \u2026"
+    },
+    {
+     "pred": "South",
+     "correct": true,
+     "think": "The camera is facing North, so the direction the white car is facing depends on its orientation relative to the camera's view.\n\n1. The white car is positioned on the road ahead of the bus, in the same lane or adjacent lane. \n2. The car's front is visible, indicating it is moving or facing towards the camera's direction. \n3. Since the camera is facing North, if the car is coming towards the camera, it would be facing South. If it is moving away, it would be facing North. \n4. The car appears to be approaching the camera (as it is in the same lane and visible in front of the bus), so it is moving \u2026"
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT_LEFT/nuscenes_20649_CAM_FRONT_LEFT.webp",
+   "camera": "north",
+   "object": "white truck",
+   "gold": "Southwest",
+   "rollouts": [
+    {
+     "pred": "Southwest",
+     "correct": true,
+     "think": "The camera is facing North. The white truck is on the right side of the image. The front of the truck is turned towards the left side of the image relative to the camera's perspective. Since the camera is facing North, left from the camera's view would be West. However, the truck is not facing directly West but slightly South as well, given the angle of the road and the truck's positioning. Wait, let's recheck: the truck is on the right side of the image, and its front is directed towards the left side of the frame. If the camera is facing North, then the left side of the image is West. But th \u2026"
+    },
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing North. The white truck is on the right side of the image. The truck\u2019s front is turned toward the left side of the image (toward the center of the intersection), which is East. However, because the camera is facing North, the truck\u2019s front is angled slightly toward the South as well. The truck is not facing directly East or West but rather a diagonal direction. Given the options, the closest match is Southeast: the truck is facing East with a downward (southerly) angle relative to the camera\u2019s North-facing perspective. \n\nCheck: If the truck were facing Northeast, it would b \u2026"
+    },
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing North. The white truck is on the right side of the image. The truck\u2019s front is turned toward the left side of the image (toward the center of the intersection), which is East. However, because the road appears to be slightly angled and the truck is not perfectly aligned with East, the direction is more precisely Southeast. The options include Southeast, which matches this analysis. The other options are inconsistent: Northeast would be toward the upper-right, Northwest toward the upper-left, and Southwest toward the lower-left\u2014none of which align with the truck\u2019s orientati \u2026"
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT/nuscenes_24908_CAM_FRONT.webp",
+   "camera": "south",
+   "object": "black car",
+   "gold": "North",
+   "rollouts": [
+    {
+     "pred": "North",
+     "correct": true,
+     "think": "The camera is facing South, so the direction the camera is pointing is South. The black car is in front of the camera, and since the car is facing the camera, it must be facing the opposite direction of the camera. If the camera is facing South, the opposite direction is North. Therefore, the black car is facing North.\n\nCheck: The car is positioned on the road, and the front of the car (hood, headlights, grille) is visible to the camera. This confirms the car is facing the camera. Since the camera faces South, the car faces North."
+    },
+    {
+     "pred": "South",
+     "correct": false,
+     "think": "The camera is facing South, so the direction the camera is pointing is South. The black car is in front of the camera, and since the camera is facing South, the car is facing the same direction as the camera. Therefore, the black car is facing South."
+    },
+    {
+     "pred": "South",
+     "correct": false,
+     "think": "The camera is facing South, so the view is looking South. The black car is in front of the camera, centered in the lane. Since the car is directly ahead in the path of the camera's view, it must be facing the same direction as the camera. Therefore, the black car is facing South. To confirm, if the car were facing North, it would be coming toward the camera; East or West would mean it's perpendicular, but it's aligned with the road which runs North-South (given camera facing South)."
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT_LEFT/nuscenes_15976_CAM_FRONT_LEFT.webp",
+   "camera": "south",
+   "object": "white truck",
+   "gold": "Northwest",
+   "rollouts": [
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing South, so the direction the camera is pointing (toward the horizon in the image) is South. In the image, the white truck is located on the left side, near the intersection. To determine its facing direction, we need to consider the truck's orientation relative to the camera's South-facing direction.\n\n1. The white truck is positioned on the left side of the image, which corresponds to East of the camera's central South direction. Since the camera faces South, the left side of the image is East, and the right side is West.\n2. The truck appears to be facing toward the right s \u2026"
+    },
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing South, so the direction the truck is facing must be determined relative to this.\n\nFirst, identify the white truck in the image. It is on the left side, near the building. Since the camera is facing South, the truck's orientation is observed from a South-facing perspective.\n\nIn the image, the white truck appears to be positioned such that its front is pointing towards the left side of the image. Given the camera is facing South, left from the camera's perspective corresponds to East. However, the truck is on the left side of the image (from the camera's view), and if the ca \u2026"
+    },
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing South, so the directions are relative to that orientation. \n\n1. The white truck is located on the left side of the image, near the intersection. \n2. The front of the truck is pointing towards the left side of the image (from the camera's perspective). \n3. Since the camera is facing South, left from the camera's perspective is East. \n4. The truck is on a road that appears to be going North-South (since the camera is facing South, the road the truck is on would be the same as the camera's direction if it's facing South). Wait, no\u2014if the camera is facing South, then the road  \u2026"
+    }
+   ]
+  },
+  {
+   "image": "/mnt/data4/shasta/amar.amarjyoti/research_data/raw/surds/train/image/CAM_FRONT/nuscenes_23711_CAM_FRONT.webp",
+   "camera": "south",
+   "object": "blue car",
+   "gold": "Northeast",
+   "rollouts": [
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing South, so the scene\u2019s left is East, right is West, top is North, and bottom is South.\n\nThe blue car is on the right side of the image, parked near the curb. Its front end (grille and headlights) points toward the left side of the image. Since the camera faces South, left in the image corresponds to East. However, the car\u2019s front is angled slightly toward the bottom-left of the image (which is South-East). \n\nTo confirm: \n- If the car faced East, its front would be perpendicular to the camera\u2019s South direction (pointing left along the image\u2019s horizontal axis).\n- If it faced  \u2026"
+    },
+    {
+     "pred": "Southeast",
+     "correct": false,
+     "think": "The camera is facing South, so the scene\u2019s left is East, right is West, forward is South, and backward is North. The blue car is on the right side of the image, parked near the curb. Its front is angled toward the left side of the image (which is East) and slightly toward the camera (South). Therefore, the car is facing Southeast. Let\u2019s verify: if the car were facing Northeast, it would point toward the upper-left; Northwest would be upper-right; Southwest would be lower-left. The car\u2019s front is clearly oriented toward the lower-left relative to the camera\u2019s South-facing view, which correspond \u2026"
+    },
+    {
+     "pred": "Northeast",
+     "correct": true,
+     "think": "The camera is facing South, so the scene\u2019s left is East, right is West, top is North, and bottom is South.\n\nThe blue car is on the right side of the image, parked near the curb. Its front end (hood) points toward the left side of the image. Since the camera faces South, left in the image corresponds to East. Therefore, the car\u2019s front is oriented toward East.\n\nTo confirm:\n- If the car faced South, its front would point down (toward the bottom of the image).\n- If it faced North, its front would point up (toward the top).\n- If it faced West, its front would point right (toward the right edge).\n- \u2026"
+    }
+   ]
+  }
+ ]
+}

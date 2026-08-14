@@ -28,14 +28,24 @@ FAITHFULLY from the vetted, corrected eval in
 which is the same correction tracked in MEMORY (continuous-answer-eval: xy2d/depth
 need abs-diff+tolerance, not exact match; xy2d coords are 0-1000 normalised).
 
-IMPORTANT coord-system note (differs slightly from the audit notebook, on purpose):
-In the audit notebook the *prediction* was 0-1000 normalised but the *gold* (from the
-source QA file) was in absolute pixels, so only the prediction was rescaled. In
-val_1k the assistant `<answer>` gold is the teacher's distilled trace, which is ALSO
-in Qwen 0-1000 normalised coords (verified: gold [946,574] on a 1600x900 image
--> 1513.6,516.6 px ~= source-QA pixel gold [1515,510]). Therefore here we rescale
-BOTH pred and gold by (W,H)/1000 to pixels before the L2 compare, exactly as the
-task contract specifies. The tolerance (50 px) is carried over unchanged.
+IMPORTANT coord-system note — the recurring SURDS xy2d frame trap (read this):
+  * The PREDICTION (Qwen3-VL student AND the 235B teacher) is ALWAYS 0-1000 NORMALISED.
+  * The GOLD frame DIFFERS BY DATASET — this is the trap:
+      - PIXELS (1600x900): GRPO curriculum L{1,2,3}.jsonl, source QA
+        `_train_qa_for_cot.jsonl`, teacher pool `cot_*_grounding.jsonl` `gt_answer`.
+      - 0-1000 NORMALISED: SFT `sft_stageB/train.jsonl`, val_1k, heldout eval
+        (`<answer>` = teacher distilled trace), val_meta.parquet (extracted from those).
+  Callers MUST declare the gold frame via `gold_space=` ('pixels' default, or 'norm').
+  score_one then reconciles BOTH operands into ONE pixel space (the native SURDS
+  1600x900 frame) before the L2 compare, so 50 px tolerance is always meaningful:
+      pred_px = pred * (W,H)/1000                          (pred is always 0-1000)
+      gold_px = gold              if gold_space=='pixels'
+      gold_px = gold * (W,H)/1000 if gold_space=='norm'
+  Defensive auto-detect: if gold_space=='norm' but a gold coord exceeds 1000 it is
+  actually pixels (and vice-versa is impossible), so the obviously-pixel value is used
+  as-is rather than rescaled again — this stops the silent norm-vs-pixel corruption
+  that previously made teacher xy2d read 0.8% (true 76%) and broke the val_1k ablation.
+  Full rule: repo CLAUDE.md "SURDS xy2d coordinate frames".
 
 TOLERANCES (ported from CONT_TOL in the audit notebook; see module docstring at
 bottom for the rationale):
@@ -233,7 +243,7 @@ def _categorical_match(pred, gold):
 # ----------------------------------------------------------------------------
 # score_one
 # ----------------------------------------------------------------------------
-def score_one(pred_answer, gold_answer, template_type, image_wh=None):
+def score_one(pred_answer, gold_answer, template_type, image_wh=None, gold_space="pixels"):
     """Score a single prediction against gold for one SURDS template.
 
     Parameters
@@ -241,8 +251,16 @@ def score_one(pred_answer, gold_answer, template_type, image_wh=None):
     pred_answer : str   raw predicted <answer> text (or already-extracted string)
     gold_answer : str   gold <answer> text
     template_type : str one of lr/distance/fb/yaw/xy2d/depth
-    image_wh : (W,H) | None   pixel size for xy2d rescale. If None, xy2d is scored
-                              in normalised 0-1000 space with NORM_XY_TOL.
+    image_wh : (W,H) | None   pixel size for the xy2d rescale (default get_image_wh
+                              gives (1600,900)). If None, xy2d falls back to scoring
+                              in normalised 0-1000 space with NORM_XY_TOL — valid only
+                              when the gold is ALSO normalised (gold_space='norm').
+    gold_space : 'pixels' | 'norm'   the coordinate frame the xy2d GOLD is stored in.
+                              The PREDICTION is always 0-1000 normalised. 'pixels' is
+                              the default (curriculum / source-QA / teacher-pool gold);
+                              'norm' is for SFT/val_1k/heldout/val_meta gold. score_one
+                              reconciles BOTH into pixel space before comparing. See the
+                              module docstring "frame trap" note. Ignored for non-xy2d.
 
     Returns
     -------
@@ -259,20 +277,43 @@ def score_one(pred_answer, gold_answer, template_type, image_wh=None):
             return {"correct": False, "kind": "continuous", "template_type": tt,
                     "parse_ok": False, "detail": {"error": "unparseable point",
                                                   "pred": p, "gold": g}}
+        gs = (gold_space or "pixels").strip().lower()
+        # Defensive auto-detect: a gold coord > 1000 can only be pixels (the 0-1000
+        # grid can't exceed 1000); a whole-point <= 1000 declared 'pixels' on a
+        # >1000-wide frame is suspicious but legal (top-left objects), so we only
+        # OVERRIDE the unambiguous direction: declared-norm-but-actually-pixels.
+        gold_is_pixels = (gs == "pixels") or (max(g[0], g[1]) > 1000.0)
+        frame_corrected = gold_is_pixels and gs == "norm"
         if image_wh is not None:
             W, H = image_wh
-            pp = (p[0] * W / 1000.0, p[1] * H / 1000.0)   # 0-1000 norm -> px
-            gg = (g[0] * W / 1000.0, g[1] * H / 1000.0)
+            # Qwen prediction is 0-1000 RELATIVE coords -> un-normalize to pixels.
+            pp = (p[0] * W / 1000.0, p[1] * H / 1000.0)
+            # Reconcile gold into the SAME pixel frame.
+            if gold_is_pixels:
+                gg = (g[0], g[1])                              # already pixels
+            else:
+                gg = (g[0] * W / 1000.0, g[1] * H / 1000.0)    # norm -> pixels
             dist = math.hypot(pp[0] - gg[0], pp[1] - gg[1])
             tol = XY2D_TOL_PX
             space = "px"
         else:
-            dist = math.hypot(p[0] - g[0], p[1] - g[1])   # normalised 0-1000 space
+            # No image size. Only valid when BOTH operands are already normalised
+            # (pred is always 0-1000; gold must be 'norm'). If the gold is pixels we
+            # CANNOT reconcile without (W,H) -> flag the frame mismatch loudly instead
+            # of silently comparing 0-1000 vs ~1600 (the old corruption path).
+            if gold_is_pixels:
+                return {"correct": False, "kind": "continuous", "template_type": tt,
+                        "parse_ok": True,
+                        "detail": {"error": "frame mismatch: pixel gold needs image_wh "
+                                            "to reconcile against 0-1000 pred",
+                                   "space": "frame_error", "pred": p, "gold": g}}
+            dist = math.hypot(p[0] - g[0], p[1] - g[1])
             tol = NORM_XY_TOL
             space = "norm"
         return {"correct": dist <= tol, "kind": "continuous", "template_type": tt,
                 "parse_ok": True,
                 "detail": {"l2": dist, "tol": tol, "space": space,
+                           "gold_space": gs, "frame_corrected": frame_corrected,
                            "pred": p, "gold": g}}
 
     # ----- continuous: depth ----------------------------------------------
@@ -344,16 +385,34 @@ def _selftest():
     chk("yaw hyphen", score_one("north-east", "Northeast", "yaw")["correct"], True)
     chk("yaw wrong", score_one("East", "West", "yaw")["correct"], False)
 
-    # xy2d with image size: both normalised 0-1000, rescale to px
-    # gold [946,574] vs pred [950,570] on 1600x900 -> small px error < 50
-    chk("xy2d close px",
-        score_one("[950, 570]", "[946, 574]", "xy2d", image_wh=(1600, 900))["correct"], True)
-    # far off
-    chk("xy2d far px",
-        score_one("[100, 100]", "[946, 574]", "xy2d", image_wh=(1600, 900))["correct"], False)
-    # normalised-space fallback (no image_wh)
-    chk("xy2d close norm",
-        score_one("[946, 576]", "[946, 574]", "xy2d")["correct"], True)
+    # xy2d PIXEL gold (default gold_space='pixels'): pred 0-1000 -> px, gold as-is.
+    # pred [824,578] on 1600x900 -> (1318,520) px vs pixel gold [1321,531] -> err ~12 px
+    chk("xy2d close px (pixel gold)",
+        score_one("[824, 578]", "[1321, 531]", "xy2d", image_wh=(1600, 900))["correct"], True)
+    chk("xy2d far px (pixel gold)",
+        score_one("[100, 100]", "[1321, 531]", "xy2d", image_wh=(1600, 900))["correct"], False)
+    # xy2d NORMALISED gold (gold_space='norm') + image_wh: BOTH rescaled to px.
+    # pred [950,570] vs norm gold [946,574] -> tiny px error < 50
+    chk("xy2d close px (norm gold)",
+        score_one("[950, 570]", "[946, 574]", "xy2d", image_wh=(1600, 900),
+                  gold_space="norm")["correct"], True)
+    chk("xy2d far px (norm gold)",
+        score_one("[100, 100]", "[946, 574]", "xy2d", image_wh=(1600, 900),
+                  gold_space="norm")["correct"], False)
+    # the OLD BUG: norm gold scored as pixels (default) -> pred(px ~1518) vs gold(946)
+    # -> huge error -> wrongly incorrect. Confirms why callers must pass gold_space='norm'.
+    chk("xy2d norm-gold-as-pixels is wrong",
+        score_one("[946, 574]", "[946, 574]", "xy2d", image_wh=(1600, 900))["correct"], False)
+    # defensive auto-detect: declared 'norm' but gold is clearly pixels (x>1000) -> used as px
+    chk("xy2d auto-detect pixel gold under norm flag",
+        score_one("[824, 578]", "[1321, 531]", "xy2d", image_wh=(1600, 900),
+                  gold_space="norm")["correct"], True)
+    # normalised-space fallback (no image_wh, both norm)
+    chk("xy2d close norm (no wh)",
+        score_one("[946, 576]", "[946, 574]", "xy2d", gold_space="norm")["correct"], True)
+    # frame error: pixel gold with no image_wh -> cannot reconcile -> flagged, not silent
+    chk("xy2d frame-error pixel gold no wh",
+        score_one("[824, 578]", "[1321, 531]", "xy2d")["detail"].get("space"), "frame_error")
     chk("xy2d unparseable",
         score_one("dunno", "[946, 574]", "xy2d")["parse_ok"], False)
 

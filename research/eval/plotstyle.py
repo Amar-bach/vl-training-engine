@@ -133,6 +133,9 @@ ARM_COLORS = {
     "doc_text":          _OKABE_ITO["vermillion"],    # #D55E00
     "general_vqa":       _OKABE_ITO["sky_blue"],      # #56B4E9
     "full":              _OKABE_ITO["reddish_purple"],# #CC79A7
+    # Stage-C DeepSeek trace-enrichment arms (built on top of the Stage-B1 SFT).
+    "stage_c":               "#9467bd",   # purple — Stage-C enrichment of the SURDS-only SFT
+    "stage_c_mulberry_full": "#8c564b",   # brown  — Stage-C enrichment x full Mulberry mix
 }
 
 # Consistent display order: baselines first, then Mulberry arms, then full.
@@ -149,6 +152,8 @@ ARM_ORDER = [
     "doc_text",
     "general_vqa",
     "full",
+    "stage_c",
+    "stage_c_mulberry_full",
 ]
 
 # Sequential colormap for accuracy heatmaps (cividis is colorblind-safe).
@@ -257,6 +262,8 @@ _ARM_PRETTY = {
     "doc_text":          "+ Doc/Text",
     "general_vqa":       "+ General VQA",
     "full":              "+ Full Mulberry",
+    "stage_c":               "Stage-C enrich (SURDS)",
+    "stage_c_mulberry_full": "Stage-C enrich x Mulberry",
 }
 
 _TEMPLATE_PRETTY = {
